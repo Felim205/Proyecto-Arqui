@@ -1,0 +1,134 @@
+includelib \Windows\System32\kernel32.dll
+ExitProcess proto
+
+.data
+    numerador dq ?            ; Numerador de fracción actual
+    denominador dq ?          ; Denominador de fracción actual
+    heap dq 1024 dup(0)       ; Reserva 1024 * 8 bytes para el heap dinámico (128 nodos)
+    heap_start dq ?           ; Inicializa heap_start
+    nivel dq 5                ; Nivel máximo (fijo) que usaremos
+    numerador_buscar dq 10    ; Inicializamos numerador a buscar
+    denominador_buscar dq 8   ; Inicializamos denominador a buscar
+    mensaje1 db "Sí está en el árbol", 0  ; Primer mensaje terminado en nulo
+    mensaje2 db "No está en el árbol", 0  ; Segundo mensaje terminado en nulo
+
+.code
+main PROC
+    ; Inicializar heap_start para apuntar al inicio del heap
+    lea rdi, heap             ; Cargar la dirección de heap en RDI
+    mov heap_start, rdi       ; Guardar la dirección base de heap en heap_start
+
+    ; Verificar que heap_start no sea nulo
+    cmp heap_start, 0         ; Compara si heap_start es nulo
+    je error_handler          ; Si es nulo, salta al manejador de errores
+
+    ; Cargar el nivel máximo directamente
+    mov rdi, nivel            ; Cargar nivel máximo en un registro
+
+    ; Inicializar el árbol de Stern-Brocot
+    call inicializar_arbol
+
+    ; Asignar numerador y denominador a los registros
+    mov rdi, numerador_buscar ; Cargar numerador a buscar en RDI
+    mov rsi, denominador_buscar ; Cargar denominador a buscar en RSI
+
+    ; Buscar el número racional en el árbol
+    call buscar_racional
+
+    ; Finalizar el programa
+    call ExitProcess
+
+error_handler:
+    ; Manejador de errores en caso de que heap_start sea nulo
+    mov rdi, offset mensaje2  ; Mensaje de error
+    call imprimir_mensaje     ; Llamar a la función de imprimir
+    call ExitProcess          ; Salir del proceso
+main ENDP
+
+inicializar_arbol PROC
+    ; Inicializar el primer nivel del árbol (SB0)
+    mov rax, 0                ; Numerador del nodo izquierdo
+    mov rbx, 1                ; Denominador del nodo izquierdo
+    call crear_nodo           ; Crear nodo izquierdo en heap
+    
+    mov rax, 1                ; Numerador del nodo derecho
+    mov rbx, 0                ; Denominador del nodo derecho
+    call crear_nodo           ; Crear nodo derecho en heap
+    
+    ret
+inicializar_arbol ENDP
+
+crear_nodo PROC
+    ; Crea un nodo en el heap dinámico
+    ; Verificar que heap_start no es nulo antes de acceder a él
+    cmp heap_start, 0
+    je error_handler          ; Si es nulo, saltar al manejador de errores
+    
+    mov rdi, heap_start       ; Cargar la dirección del heap
+    mov [rdi], rax            ; Guardar el numerador en el nodo
+    mov [rdi + 8], rbx        ; Guardar el denominador en el nodo
+    add heap_start, 16        ; Incrementar el puntero del heap (16 bytes por nodo)
+    ret
+crear_nodo ENDP
+
+error_handler:
+    ret
+
+buscar_racional PROC
+    ; Asumimos que el numerador a buscar está en RDI
+    ; y el denominador a buscar está en RSI
+    mov rbx, 0              ; Inicializa el índice para recorrer el heap
+    mov r10, 64             ; Total de nodos en el heap (1024 bytes / 16 bytes por nodo)
+
+buscar_loop:
+    cmp rbx, r10            ; Compara si hemos recorrido todos los nodos
+    jge no_encontrado       ; Si sí, no se encontró el racional
+
+    ; Calcular la dirección del nodo actual
+    lea rdi, heap           ; Cargar la dirección base del heap
+    mov rax, rbx            ; Copiar el índice en rax
+    shl rax, 4              ; Multiplicar el índice por 16 (tamaño de cada nodo)
+    add rdi, rax            ; Sumar el desplazamiento al heap
+
+    mov rax, [rdi]          ; Numerador del nodo actual
+    mov rdx, [rdi + 8]      ; Denominador del nodo actual
+
+    ; Comparar fracciones usando multiplicación cruzada
+    mov r8, rax             ; Guardar numerador del nodo en r8
+    mov r9, rdx             ; Guardar denominador del nodo en r9
+
+    ; Realizar a*d y c*b
+    mov rax, r8             ; Numerador del nodo
+    mul rsi                 ; rax = numerador_nodo * denominador_a_buscar (a * d)
+
+    mov rdx, rdi            ; Cargar numerador a buscar
+    mov rdi, r9             ; Denominador del nodo
+    mul rdi                 ; rdx = numerador_a_buscar * denominador_nodo (c * b)
+
+    ; Comparar productos cruzados
+    cmp rax, rdx            ; Compara a*d con c*b
+    je encontrado           ; Si son iguales, hemos encontrado la fracción
+
+    ; Si no son iguales, continuamos buscando
+    inc rbx                 ; Incrementar el índice para el siguiente nodo
+    jmp buscar_loop         ; Repetir el ciclo
+
+no_encontrado:
+    mov rdi, offset mensaje2 ; Cargar el mensaje "No está en el árbol"
+    call imprimir_mensaje    ; Llamar a la función para imprimir el mensaje
+    ret
+
+encontrado:
+    mov rdi, offset mensaje1 ; Cargar el mensaje "Sí está en el árbol"
+    call imprimir_mensaje    ; Llamar a la función para imprimir el mensaje
+    ret
+buscar_racional ENDP
+
+imprimir_mensaje PROC
+    ; Lógica para imprimir el mensaje en RDI
+   
+    ; Usar WriteConsole o similar.
+    ret
+imprimir_mensaje ENDP
+
+END
